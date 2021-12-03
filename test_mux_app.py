@@ -7,6 +7,10 @@ import time
 import unittest
 from unittest.mock import MagicMock
 
+gsttiovx_mux_appsink_desc = "videotestsrc is-live=true ! video/x-raw,format=RGB,width=320,height=240,framerate=30/1,pixel-aspect-ratio=1/1 ! queue ! mux. tiovxmux name=mux sink_0::pool-size=4 ! perf ! appsink name=appsink sync=true qos=false emit-signals=true drop=true max-buffers=2"
+gsttiovx_mux_appsrc_test_desc = "appsrc is-live=true name=appsrc ! fakesink"
+gsttiovx_mux_appsrc_app_desc = "appsrc is-live=true name=appsrc do-timestamp=true format=time ! video/x-raw,format=RGB,width=320,height=240,framerate=30/1,pixel-aspect-ratio=1/1 ! videoconvert ! videoscale ! kmssink force-modesetting=true sync=false async=false qos=false"
+
 class GstMediaError(RuntimeError):
         pass
 
@@ -96,9 +100,8 @@ class TestGstMedia(unittest.TestCase):
 
 class TestBuferingMaster(unittest.TestCase):
         def setUp(self):
-                self.desc_sinker = "videotestsrc is-live=true ! queue ! mux. tiovxmux name=mux sink_0::pool-size=4 ! perf ! appsink name=appsink sync=true qos=false emit-signals=true drop=true max-buffers=2"
-
-                self.desc_sourcer = "appsrc is-live=true name=appsrc ! fakesink"
+                self.desc_sinker = gsttiovx_mux_appsink_desc
+                self.desc_sourcer = gsttiovx_mux_appsrc_test_desc
 
                 self.obj_media_sinker = GstMedia()
                 self.obj_media_sinker.make_media("media_sinker", self.desc_sinker)
@@ -122,5 +125,38 @@ class TestBuferingMaster(unittest.TestCase):
                 sink_callback.__call__.assert_called_once()
 
 
+class GstTIOVXMuxAppSinkAppSrcApp():
+        def __init__(self):
+                self.desc_sinker = gsttiovx_mux_appsink_desc
+                self.desc_sourcer = gsttiovx_mux_appsrc_app_desc
+
+                self.obj_media_sinker = GstMedia()
+                self.obj_media_sinker.make_media("media_sinker", self.desc_sinker)
+
+                self.obj_media_sourcer = GstMedia()
+                self.obj_media_sourcer.make_media("media_sourcer", self.desc_sourcer)
+
+        def run(self):
+                sinker_appsink = self.obj_media_sinker._pipeline.get_by_name("appsink")
+                sourcer_appsrc = self.obj_media_sourcer._pipeline.get_by_name("appsrc")
+                obj_buffering_master = BufferingMaster(sinker_appsink, sourcer_appsrc)
+
+                sink_callback = SinkCallback()
+
+                obj_buffering_master.sinker_user_callback(sink_callback)
+
+                self.obj_media_sinker.play_media()
+                self.obj_media_sourcer.play_media()
+
+                time.sleep(25)
+
+                self.obj_media_sinker.stop_media()
+                self.obj_media_sourcer.stop_media()
+
+
 if __name__ == '__main__':
-    unittest.main()
+        app = GstTIOVXMuxAppSinkAppSrcApp()
+        app.run()
+
+        unittest.main()
+
